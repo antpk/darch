@@ -65,45 +65,53 @@ genfstab -U -p rootfs | sed -e 's/#.*$//' -e '/^$/d' > rootfs/etc/fstab
 # Set the computer name
 echo "darch-demo" > rootfs/etc/hostname
 
+# Script to install everything
+cat <<EOF > rootfs/runme
+#!/bin/sh
+
 # Update all the packages
-arch-chroot rootfs apt-get update
+apt-get update
 
 # Install network manager for networking and SSH
-arch-chroot rootfs apt-get -y install network-manager openssh-server
+apt-get -y install network-manager openssh-server 
 
 # Install GRUB
-arch-chroot rootfs grub-install ${loop_device}
-arch-chroot rootfs grub-mkconfig -o /boot/grub/grub.cfg
+/sbin/grub-install ${loop_device}
+/sbin/grub-mkconfig -o /boot/grub/grub.cfg
 
 # Create the default users
-arch-chroot rootfs apt-get -y install sudo
-arch-chroot rootfs /usr/bin/bash -c 'echo -en "root\nroot" | passwd'
-arch-chroot rootfs useradd -m -G users,sudo -s /usr/bin/bash darch
-arch-chroot rootfs /usr/bin/bash -c 'echo -en "darch\ndarch" | passwd darch'
+apt-get -y install sudo
+/usr/bin/bash -c 'echo -en "root\nroot" | passwd'
+/sbin/useradd -m -G users,sudo -s /usr/bin/bash darch
+/usr/bin/bash -c 'echo -en "darch\ndarch" | passwd darch'
 
 # Install Darch
-arch-chroot rootfs apt-get -y install curl gnupg software-properties-common
-arch-chroot rootfs /bin/bash -c "curl -L https://raw.githubusercontent.com/godarch/debian-repo/master/key.pub | apt-key add -"
-arch-chroot rootfs add-apt-repository 'deb https://raw.githubusercontent.com/godarch/debian-repo/master/darch testing main'
-arch-chroot rootfs apt-get update
-arch-chroot rootfs apt-get -y install darch
-arch-chroot rootfs mkdir -p /etc/containerd
-echo "root = \"/var/lib/darch/containerd\"" > rootfs/etc/containerd/config.toml
-arch-chroot rootfs systemctl enable containerd
+apt-get -y install curl gnupg software-properties-common
+/bin/bash -c "curl -L https://raw.githubusercontent.com/godarch/debian-repo/master/key.pub | apt-key add -"
+add-apt-repository 'deb https://raw.githubusercontent.com/godarch/debian-repo/master/darch testing main'
+apt-get update
+apt-get -y install darch
+mkdir -p /etc/containerd
+echo "root = \"/var/lib/darch/containerd\"" > /etc/containerd/config.toml
+systemctl enable containerd
 
 # Setup the fstab hooks for Darch
-cat rootfs/etc/fstab | tail -n +2 > rootfs/etc/darch/hooks/default_fstab
-echo "*=default_fstab" > rootfs/etc/darch/hooks/fstab.config
+cat /etc/fstab | tail -n +2 > /etc/darch/hooks/default_fstab
+echo "*=default_fstab" > /etc/darch/hooks/fstab.config
 
 # Run grub-mkconfig again to ensure it loads the Darch grub config file
-arch-chroot rootfs grub-mkconfig -o /boot/grub/grub.cfg
+grub-mkconfig -o /boot/grub/grub.cfg
 
 # Clone our examples repo
-arch-chroot rootfs apt-get -y install git
-arch-chroot rootfs git clone https://github.com/godarch/example-recipes.git /home/darch/example-recipes
-arch-chroot rootfs mkdir /home/darch/Desktop
-arch-chroot rootfs ln -s /home/darch/example-recipes /home/darch/Desktop/Recipes
-arch-chroot rootfs chown -R darch:darch /home/darch/
+apt-get -y install git
+git clone https://github.com/godarch/example-recipes.git /home/darch/example-recipes
+mkdir /home/darch/Desktop
+ln -s /home/darch/example-recipes /home/darch/Desktop/Recipes
+chown -R darch:darch /home/darch/
+
+EOF
+chmod +x rootfs/runme
+arch-chroot rootfs /runme
 
 # Clean up
 umount rootfs/etc/darch
